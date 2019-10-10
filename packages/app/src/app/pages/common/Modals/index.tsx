@@ -1,5 +1,5 @@
-import React, { Component } from 'react';
-import { inject, observer } from 'app/componentConnectors';
+import React, { FunctionComponent, useState, useEffect } from 'react';
+import { useOvermind } from 'app/overmind';
 import { ThemeProvider } from 'styled-components';
 import Modal from 'app/components/Modal';
 import Loadable from 'app/utils/Loadable';
@@ -31,7 +31,7 @@ import PickSandboxModal from './PickSandboxModal';
 import FeedbackModal from './FeedbackModal';
 import NetlifyLogs from './NetlifyLogs';
 // eslint-disable-next-line
-import SignInForTemplates from './SignInForTemplates/index.ts';
+import SignInForTemplates from './SignInForTemplates';
 import { SurveyModal } from './SurveyModal';
 
 const MoveSandboxFolderModal = Loadable(() =>
@@ -141,68 +141,58 @@ const modals = {
   },
 };
 
-class Modals extends Component {
-  state = {
-    theme: {
-      colors: {},
-      vscodeTheme: codesandbox,
+const Modals: FunctionComponent = () => {
+  const {
+    state: {
+      currentModal,
+      editor: { currentSandbox: sandbox },
+      preferences: {
+        settings: { customVSCodeTheme },
+      },
     },
-    customVSCodeTheme: this.props.store.preferences.settings.customVSCodeTheme,
-  };
 
-  componentDidMount() {
-    this.loadTheme();
-  }
+    actions: { modalClosed },
+  } = useOvermind();
 
-  componentDidUpdate() {
-    if (
-      this.props.store.preferences.settings.customVSCodeTheme !==
-      this.state.customVSCodeTheme
-    ) {
-      this.loadTheme();
-    }
-  }
+  const [theme, setTheme] = useState({ colors: {}, vscodeTheme: codesandbox });
 
-  loadTheme = async () => {
-    const { customVSCodeTheme } = this.props.store.preferences.settings;
-
+  const loadTheme = async () => {
     try {
       const theme = await getVSCodeTheme('', customVSCodeTheme);
-      this.setState({ theme, customVSCodeTheme });
+      setTheme(theme);
     } catch (e) {
       console.error(e);
     }
   };
 
-  render() {
-    const { signals, store } = this.props;
-    const sandbox = store.editor.currentSandbox;
-    const templateDef = sandbox && getTemplateDefinition(sandbox.template);
+  useEffect(() => {
+    loadTheme();
+  }, [customVSCodeTheme]);
 
-    const modal = store.currentModal && modals[store.currentModal];
+  const templateDef = getTemplateDefinition(sandbox.template);
+  const modal = currentModal && modals[currentModal];
 
-    return (
-      <ThemeProvider
-        theme={{
-          templateColor: templateColor(sandbox, templateDef),
-          templateBackgroundColor: templateDef && templateDef.backgroundColor,
-          ...this.state.theme,
-        }}
+  return (
+    <ThemeProvider
+      theme={{
+        templateColor: templateColor(sandbox, templateDef),
+        templateBackgroundColor: templateDef && templateDef.backgroundColor,
+        ...theme,
+      }}
+    >
+      <Modal
+        isOpen={Boolean(modal)}
+        width={modal && modal.width}
+        onClose={modalClosed()}
       >
-        <Modal
-          isOpen={Boolean(modal)}
-          width={modal && modal.width}
-          onClose={isKeyDown => signals.modalClosed({ isKeyDown })}
-        >
-          {modal
-            ? React.createElement(modal.Component, {
-                closeModal: () => signals.modalClosed({ isKeyDown: false }),
-              })
-            : null}
-        </Modal>
-      </ThemeProvider>
-    );
-  }
-}
+        {modal
+          ? React.createElement(modal.Component, {
+              closeModal: () => modalClosed(),
+            })
+          : null}
+      </Modal>
+    </ThemeProvider>
+  );
+};
 
-export default inject('store', 'signals')(observer(Modals));
+export default Modals;
